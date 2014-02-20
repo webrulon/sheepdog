@@ -100,6 +100,8 @@
 #define SD_OP_NFS_CREATE	0xBB
 #define SD_OP_NFS_DELETE	0xBC
 #define SD_OP_EXIST	0xBD
+#define SD_OP_DECREF_OBJ     0xBE
+#define SD_OP_DECREF_PEER    0xBF
 
 /* internal flags for hdr.flags, must be above 0x80 */
 #define SD_FLAG_CMD_RECOVERY 0x0080
