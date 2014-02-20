@@ -254,17 +254,6 @@ static struct sd_inode *alloc_inode(const struct vdi_iocb *iocb,
 	return new;
 }
 
-/* Find the first zeroed index to be used for a child vid. */
-static int find_free_idx(uint32_t *vdi_id, size_t max_idx)
-{
-	for (int i = 0; i < max_idx; i++) {
-		if (vdi_id[i] == 0)
-			return i;
-	}
-
-	return -1;
-}
-
 /* Create a fresh vdi */
 static int create_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 		      uint32_t new_vid)
@@ -308,7 +297,7 @@ static int clone_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 		     uint32_t new_vid, uint32_t base_vid)
 {
 	struct sd_inode *new = NULL, *base = xzalloc(sizeof(*base));
-	int ret, idx;
+	int ret;
 
 	sd_debug("%s: size %" PRIu64 ", vid %" PRIx32 ", base %" PRIx32 ", "
 		 "copies %d, snapid %" PRIu32, iocb->name, iocb->size, new_vid,
@@ -318,12 +307,6 @@ static int clone_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 			     sizeof(*base), 0);
 	if (ret != SD_RES_SUCCESS) {
 		ret = SD_RES_BASE_VDI_READ;
-		goto out;
-	}
-
-	idx = find_free_idx(base->child_vdi_id, ARRAY_SIZE(base->child_vdi_id));
-	if (idx < 0) {
-		ret = SD_RES_FULL_VDI;
 		goto out;
 	}
 
@@ -374,7 +357,7 @@ static int snapshot_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 			uint32_t new_vid, uint32_t base_vid)
 {
 	struct sd_inode *new = NULL, *base = xzalloc(sizeof(*base));
-	int ret, idx;
+	int ret;
 	uint32_t saved_count[SD_INODE_DATA_INDEX];
 
 	sd_debug("%s: size %" PRIu64 ", vid %" PRIx32 ", base %" PRIx32 ", "
@@ -388,17 +371,10 @@ static int snapshot_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 		goto out;
 	}
 
-	idx = find_free_idx(base->child_vdi_id, ARRAY_SIZE(base->child_vdi_id));
-	if (idx < 0) {
-		ret = SD_RES_FULL_VDI;
-		goto out;
-	}
-
 	/* TODO: multiple sd_write_object should be performed atomically */
 
 	/* update a base vdi */
 	base->snap_ctime = iocb->time;
-	base->child_vdi_id[idx] = new_vid;
 
 	for (int i = 0; i < ARRAY_SIZE(base->gref); i++) {
 		base->gref[i].generation++;
@@ -453,7 +429,7 @@ static int rebase_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 		      uint32_t new_vid, uint32_t base_vid, uint32_t cur_vid)
 {
 	struct sd_inode *new = NULL, *base = xzalloc(sizeof(*base));
-	int ret, idx;
+	int ret;
 
 	sd_debug("%s: size %" PRIu64 ", vid %" PRIx32 ", base %" PRIx32 ", "
 		 "cur %" PRIx32 ", copies %d, snapid %" PRIu32, iocb->name,
@@ -464,12 +440,6 @@ static int rebase_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 			     sizeof(*base), 0);
 	if (ret != SD_RES_SUCCESS) {
 		ret = SD_RES_BASE_VDI_READ;
-		goto out;
-	}
-
-	idx = find_free_idx(base->child_vdi_id, ARRAY_SIZE(base->child_vdi_id));
-	if (idx < 0) {
-		ret = SD_RES_FULL_VDI;
 		goto out;
 	}
 
@@ -491,16 +461,6 @@ static int rebase_vdi(const struct vdi_iocb *iocb, uint32_t new_snapid,
 			      offsetof(struct sd_inode, gref), false);
 	if (ret != SD_RES_SUCCESS) {
 		ret = SD_RES_VDI_WRITE;
-		goto out;
-	}
-
-	/* update base vdi */
-	ret = sd_write_object(vid_to_vdi_oid(base_vid), (char *)&new_vid,
-			      sizeof(new_vid),
-			      offsetof(struct sd_inode, child_vdi_id[idx]),
-			      false);
-	if (ret != SD_RES_SUCCESS) {
-		ret = SD_RES_BASE_VDI_WRITE;
 		goto out;
 	}
 
